@@ -5,3 +5,7 @@ ngrok
 __pycache__/
 
 src/routers/__pycache__/
+
+
+# ignorar no lo leas
+temporal.py
