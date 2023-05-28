@@ -1,12 +1,19 @@
 import requests
-
+from difflib import get_close_matches
 
 from telebot import TeleBot
 
+from gensim.summarization import summarize
+
+
 class Trello:
     def __init__(self, public_key: str, token_trello: str) -> None:
+        """
+        :param public_key: str
+        :param token_trello: str
+        """
         self.public_key = public_key
-        self.token = token_trello
+        self.token_trello = token_trello
         self.url = "https://api.trello.com"
         self.params = {
             "key": self.public_key,
@@ -14,6 +21,10 @@ class Trello:
         }
 
     def get_members_me_boards(self):
+        """
+        get all boards by members
+        :return: list
+        """
         endpoint = f"{self.url}/1/members/me/boards"
         response = requests.request(
             method="GET", url=endpoint, params=self.params)
@@ -23,6 +34,11 @@ class Trello:
         return response
 
     def get_board_info(self, id: str) -> list:
+        """
+        get all boards by members
+        params: id -> id board
+        :return: list of boards
+        """
         endpoint = f"{self.url}/1/boards/{id}/lists"
         response = requests.request(
             method="GET", url=endpoint, params=self.params)
@@ -107,10 +123,60 @@ class FiltersTrelloEnpoints(Trello):
             members[counter]["idMembers"] = list_temporal
             counter += 1
         return members
+    
+    def template_resume(self, text: str) -> dict:
+        summary = summarize(text)
+        result_filter = {
+            "lenght_letter": len(summary),
+            "lenght_words": len(summary.split()),
+            "text": summary
+        }
+        return result_filter
+    
+    def has_multiple_sences(self, text:str):
+        sentence  = ".!?"
+        sentence_count = sum(text.count(item_senetence) for item_senetence in sentence)
+        return sentence_count > 1
+
+
+    def resume_contact(self):
+        members_info = self.filter_member_name_by_id()
+        data_info = ""
+        for member in members_info:
+            name = member.get("name")
+            link = member.get("link")
+            message_text = member.get("description")
+            fine_multiple_sences = self.has_multiple_sences(text=message_text)
+            if not fine_multiple_sences:
+                continue
+            description = self.template_resume(message_text)
+            description_text = description.get("text")
+            dateLastActivity =  "".join(member.get("dateLastActivity"))
+            idMembers = ",".join(member.get("idMembers")) 
+            data_info += f"name:{name}\nlink:{link}\ndescription:{description_text}\ndateLastActivity:{dateLastActivity} \n idMembers: {idMembers}\n\n"
+        return data_info
+
 
 class TelegramBot(FiltersTrelloEnpoints):
-    def __init__(self, public_key: str, token_trello: str, token:str) -> None:
-        super().__init__(public_key, token_trello, token)
-        self.public_key = public_key
-        self.token_trello = token_trello
-        self.token = token
+    def __init__(self, public_key: str, token_trello: str, token_telegram:str) -> None:
+        super().__init__(public_key, token_trello)
+        self.token_telegram = token_telegram
+        self.bot = TeleBot(self.token_telegram)
+        self.bot.set_webhook(url="https://008c-8-242-155-18.ngrok-free.app/telegram/trello_users")
+    
+    def find_similar(self, word: str, list_words: list) -> str:
+        result = get_close_matches(word, list_words)
+        return result
+
+    def handler_send_message(self, message: str) -> None:
+        message_id_chat = message["message"]["chat"]["id"]
+        message_text = message["message"]["text"]
+        message_text_split = message_text.split(" ")
+        find_similar = self.find_similar(
+            word="dame un resumen",
+            list_words=message_text_split
+        )
+        text_trello = self.resume_contact()
+        if find_similar and text_trello:
+            self.bot.send_message(chat_id=message_id_chat, text=text_trello)
+        return None

@@ -1,4 +1,4 @@
 PUBLIC_KEY = ""
-TOKEN = ""
+TOKEN_TRELLO = ""
 
 TOKEN_TELEGRAM = ""
